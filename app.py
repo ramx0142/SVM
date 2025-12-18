@@ -1,59 +1,50 @@
-import numpy as np
-from flask import Flask, request, render_template
+import streamlit as st
 import pickle
+import numpy as np
 import os
 
-# 1. Initialize App
-app = Flask(__name__)
+# 1. Title and Description
+st.title("Student Exam Predictor")
+st.write("Enter study and sleep hours to predict if the student will Pass or Fail.")
 
-# 2. Load Model Safely
+# 2. Load the Model
 model_path = 'SVM.pkl'
 
-if not os.path.exists(model_path):
-    print("ERROR: 'my_model.pkl' not found! Please run your training script first.")
-    model = None
-else:
+if os.path.exists(model_path):
     try:
-        model = pickle.load(open(model_path, 'rb'))
-        print("Model loaded successfully.")
+        # We use st.cache_resource so we load the model only once
+        @st.cache_resource
+        def load_model():
+            with open(model_path, 'rb') as file:
+                return pickle.load(file)
+        
+        model = load_model()
+        st.success("Model loaded successfully!")
     except Exception as e:
-        print(f"ERROR loading model: {e}")
+        st.error(f"Error loading model: {e}")
         model = None
+else:
+    st.error("File 'my_model.pkl' not found. Please upload it.")
+    model = None
 
-# 3. Home Route
-@app.route('/')
-def home():
-    return render_template('index.html')
+# 3. Create Input Fields
+study_hours = st.number_input("Study Hours", min_value=0.0, max_value=24.0, value=5.0, step=0.1)
+sleep_hours = st.number_input("Sleep Hours", min_value=0.0, max_value=24.0, value=7.0, step=0.1)
 
-# 4. Predict Route
-@app.route('/predict', methods=['POST'])
-def predict():
-    if model is None:
-        return render_template('index.html', prediction_text="Error: Model is not loaded.")
-
-    try:
-        # Get data from form
-        study = request.form.get('StudyHours')
-        sleep = request.form.get('SleepHours')
-
-        # Convert to float
-        val1 = float(study)
-        val2 = float(sleep)
-
-        # Prepare for model (Reshape is important!)
-        # The model expects [[val1, val2]], not [val1, val2]
-        features = np.array([[val1, val2]])
-
+# 4. Predict Button
+if st.button("Predict Result"):
+    if model is not None:
+        # Prepare input as 2D array
+        features = np.array([[study_hours, sleep_hours]])
+        
         # Predict
         prediction = model.predict(features)
-        output = prediction[0]
-
-        return render_template('index.html', prediction_text=f'Result: {output}')
-
-    except Exception as e:
-        # This will print the specific error to your terminal and the webpage
-        print(f"Prediction Error: {e}")
-        return render_template('index.html', prediction_text=f'Error occurred: {e}')
-
-if __name__ == "__main__":
-    app.run(debug=True, port=5000)
+        result = prediction[0]
+        
+        # Display Result
+        if result == "Pass":
+            st.success(f"Prediction: {result}")
+        else:
+            st.error(f"Prediction: {result}")
+    else:
+        st.warning("Model is not loaded, cannot predict.")
